@@ -178,6 +178,7 @@
   table.results th,table.results td{border:none;border-bottom:1px solid #eef1f5;padding:11px 14px;text-align:left}
   table.results thead th{background:#f3f6fb;font-size:.74rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:800}
   table.results td.cls{font-weight:800}
+  table.results .audit{font-weight:500;font-size:.72rem;color:var(--muted);margin-top:2px}
   table.results td.pct{font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
   table.results td.empty{color:#c0c8d2}
   table.results td.del{width:42px;text-align:center;padding:6px}
@@ -217,7 +218,7 @@
     <button class="tab info-tab" data-tab="info" title="How to use this app" aria-label="Information">ⓘ Info</button>
     <div class="appbar-title">
       <h1>Behaviour &amp; Cleanliness Tracker</h1>
-      <div class="sub">2026&ndash;27 &middot; weekly &middot; <b style="color:#d99100">TEST (free Gemini)</b></div>
+      <div class="sub">2026&ndash;27 &middot; weekly &middot; <b style="color:#1f9d74">SHARED (online)</b></div>
     </div>
     <div class="tabs">
       <button class="tab active" data-tab="entry">Enter sheet</button>
@@ -343,6 +344,7 @@
         <select id="weekPick"></select>
       </div>
       <span class="count-chip" id="weekCount">0 of 24 classes</span>
+      <button class="btn ghost" id="refreshBtn" style="padding:6px 12px;min-height:auto;font-size:.82rem">↻ Refresh</button>
       <div style="flex:1"></div>
       <div class="btn-group">
         <button class="btn ghost" id="copyBtn">Copy results</button>
@@ -385,10 +387,12 @@
 
 <script>
 /* ====== CONFIG ====== */
-/* TEST VERSION — uses free Gemini reading via a separate Cloudflare Worker.
-   Replace the URL below with your Gemini worker's address once created. */
-const WORKER_URL = "https://tracker-gemini.advik1780.workers.dev";
-const STORAGE_KEY = "tracker_results_gemini_v1";
+/* STORAGE VERSION — shared online results via Cloudflare KV.
+   READ_URL = your existing Claude reading worker (photo -> marks).
+   STORE_URL = the new storage worker (save/load shared results + password). */
+const READ_URL = "https://behaviour-tracker.advik1780.workers.dev";
+const STORE_URL = "https://tracker-storage.advik1780.workers.dev";
+const WORKER_URL = READ_URL;  // photo reading still uses the Claude worker
 
 /* ====== constants ====== */
 const FACES = {
@@ -533,17 +537,48 @@ document.querySelectorAll('.tab').forEach(t=>{
   });
 });
 
-/* ====== STORAGE (in-memory + best-effort localStorage) ====== */
-let store={};   // { week: { class: {beh, cln} } }
-function loadStore(){
-  try{const raw=localStorage.getItem(STORAGE_KEY);if(raw)store=JSON.parse(raw);}catch(e){store={};}
+/* ====== STORAGE (shared, via Cloudflare KV worker) ====== */
+let store={};            // { week: { class: {beh, cln, by, at} } }
+let session={name:null,password:null};  // remembered after first unlock this visit
+
+async function loadStore(){
+  try{
+    const res=await fetch(STORE_URL+'/load');
+    const data=await res.json();
+    store=data.store||{};
+    const rt=document.getElementById('tab-results');
+    if(rt && !rt.classList.contains('hidden'))renderResults();
+  }catch(e){
+    store={};
+    console.error('Could not load shared results:',e);
+  }
 }
-function saveStore(){
-  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(store));}catch(e){/* private mode: stays in memory */}
+
+/* push the whole store to the cloud; needs name+password */
+async function pushStore(){
+  const res=await fetch(STORE_URL+'/save',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({store,name:session.name,password:session.password})
+  });
+  const data=await res.json();
+  if(!res.ok || data.error){throw new Error(data.error||'Save failed');}
+  return data;
+}
+
+/* ask for name + password once per visit */
+function ensureSession(){
+  if(session.name && session.password)return true;
+  const name=prompt('Enter your name (recorded with each score you save):');
+  if(!name)return false;
+  const pw=prompt('Enter this week\u2019s edit password:');
+  if(!pw)return false;
+  session.name=name.trim();
+  session.password=pw.trim();
+  return true;
 }
 
 /* ====== SAVE ====== */
-document.getElementById('saveBtn').addEventListener('click',()=>{
+document.getElementById('saveBtn').addEventListener('click',async()=>{
   const cls=document.getElementById('classSel').value;
   const wk=parseInt(document.getElementById('weekNum').value,10);
   if(!cls){alert('Please select a class before saving.');document.getElementById('classSel').focus();return;}
@@ -552,18 +587,34 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
   if(s.beh.marked===0 && s.cln.marked===0){
     if(!confirm('Nothing is marked on this sheet. Save it as 0 anyway?'))return;
   }
-  store[wk]=store[wk]||{};
-  if(store[wk][cls]){
-    if(!confirm(`Class ${cls} already has a score for week ${wk}. Overwrite it?`))return;
+  if(store[wk] && store[wk][cls]){
+    if(!confirm(`Class ${cls} already has a score for week ${wk} (saved by ${store[wk][cls].by||'?'}). Overwrite it?`))return;
   }
-  store[wk][cls]={beh:+s.beh.pct.toFixed(1),cln:+s.cln.pct.toFixed(1)};
-  saveStore();
-  // reset to empty class so next sheet must be chosen consciously
-  document.getElementById('classSel').selectedIndex=0;
-  clearGrid();
-  resetPhoto();
-  window.scrollTo({top:0,behavior:'smooth'});
-  flash(`Saved ${cls} — Behaviour ${s.beh.pct.toFixed(1)}%, Cleanliness ${s.cln.pct.toFixed(1)}%. Select the next class to continue.`);
+  if(!ensureSession())return;
+
+  const saveBtn=document.getElementById('saveBtn');
+  const old=saveBtn.textContent;saveBtn.disabled=true;saveBtn.textContent='Saving\u2026';
+  const now=new Date();
+  const stamp=now.toLocaleDateString()+' '+now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  store[wk]=store[wk]||{};
+  store[wk][cls]={beh:+s.beh.pct.toFixed(1),cln:+s.cln.pct.toFixed(1),by:session.name,at:stamp};
+  try{
+    await pushStore();
+    document.getElementById('classSel').selectedIndex=0;
+    clearGrid();resetPhoto();
+    window.scrollTo({top:0,behavior:'smooth'});
+    flash(`Saved ${cls} — Behaviour ${s.beh.pct.toFixed(1)}%, Cleanliness ${s.cln.pct.toFixed(1)}%. Select the next class to continue.`);
+  }catch(err){
+    delete store[wk][cls];   // roll back the local change
+    if(/password/i.test(err.message)){
+      session.password=null;
+      alert('Wrong edit password. The score was not saved. Please try again with the correct password.');
+    }else{
+      alert('Could not save to shared storage: '+err.message);
+    }
+  }finally{
+    saveBtn.disabled=false;saveBtn.textContent=old;
+  }
 });
 document.getElementById('clearBtn').addEventListener('click',clearGrid);
 
@@ -693,7 +744,8 @@ function drawResultsTable(){
       const cls=g+s;const rec=data[cls];
       const tr=document.createElement('tr');
       if(rec){done++;
-        tr.innerHTML=`<td class="cls">${cls}</td>
+        const audit=rec.by?`<div class="audit">${rec.by}${rec.at?' · '+rec.at:''}</div>`:'';
+        tr.innerHTML=`<td class="cls">${cls}${audit}</td>
           <td class="pct ${pctClass(rec.beh)}">${rec.beh.toFixed(1)}%</td>
           <td class="pct ${pctClass(rec.cln)}">${rec.cln.toFixed(1)}%</td>
           <td class="del"><button class="row-del" title="Delete ${cls} for week ${wk}" aria-label="Delete ${cls}">✕</button></td>`;
@@ -708,27 +760,41 @@ function drawResultsTable(){
 }
 
 /* ====== delete a single class for the selected week ====== */
-function deleteClass(wk,cls){
+async function deleteClass(wk,cls){
   if(!store[wk]||!store[wk][cls])return;
   if(!confirm(`Delete the score for class ${cls} in week ${wk}? This cannot be undone.`))return;
+  if(!ensureSession())return;
+  const backup=store[wk][cls];
   delete store[wk][cls];
   if(store[wk] && Object.keys(store[wk]).length===0)delete store[wk];
-  saveStore();
-  renderWeekPicker(wk);
-  drawResultsTable();
+  try{
+    await pushStore();
+    renderWeekPicker(wk);drawResultsTable();
+  }catch(err){
+    store[wk]=store[wk]||{};store[wk][cls]=backup;  // roll back
+    if(/password/i.test(err.message)){session.password=null;alert('Wrong edit password. Nothing was deleted.');}
+    else alert('Could not update shared storage: '+err.message);
+  }
 }
 
 /* ====== delete a whole week ====== */
-document.getElementById('delWeekBtn').addEventListener('click',()=>{
+document.getElementById('delWeekBtn').addEventListener('click',async()=>{
   const wk=parseInt(document.getElementById('weekPick').value,10);
   const data=store[wk]||{};
   const n=Object.keys(data).length;
   if(n===0){alert(`Week ${wk} has no saved scores to delete.`);return;}
   if(!confirm(`Delete ALL ${n} saved class score${n>1?'s':''} for week ${wk}? This cannot be undone.`))return;
+  if(!ensureSession())return;
+  const backup=store[wk];
   delete store[wk];
-  saveStore();
-  renderWeekPicker(wk);
-  drawResultsTable();
+  try{
+    await pushStore();
+    renderWeekPicker(wk);drawResultsTable();
+  }catch(err){
+    store[wk]=backup;  // roll back
+    if(/password/i.test(err.message)){session.password=null;alert('Wrong edit password. Nothing was deleted.');}
+    else alert('Could not update shared storage: '+err.message);
+  }
 });
 
 /* ====== copy results as a readable list ====== */
@@ -771,12 +837,21 @@ document.getElementById('exportBtn').addEventListener('click',()=>{
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
 });
 
+/* ====== refresh shared data ====== */
+document.getElementById('refreshBtn').addEventListener('click',async()=>{
+  const btn=document.getElementById('refreshBtn');const old=btn.textContent;
+  btn.textContent='↻ …';btn.disabled=true;
+  await loadStore();
+  renderResults();
+  btn.textContent=old;btn.disabled=false;
+});
+
 /* ====== INIT ====== */
 buildClassDropdown();
 buildGrid();
-loadStore();
 document.getElementById('weekNum').value=isoWeek(new Date());
 render();
+loadStore();   // pull shared results from the cloud
 </script>
 </body>
 </html>

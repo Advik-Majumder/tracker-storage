@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Behaviour &amp; Cleanliness Tracker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f5fce'/%3E%3Crect x='16' y='16' width='32' height='32' rx='7' fill='none' stroke='white' stroke-width='3.5'/%3E%3Cpath d='M23 32l6 7 13-15' fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink:#1b2330; --paper:#ffffff; --line:#c9d2dd; --line-strong:#8d9bad;
+    --bg:#eef1f5; --good:#2e9e5b; --good-bg:#e3f5ea; --okay:#d99100; --okay-bg:#fbf2dc;
+    --bad:#d4453b; --bad-bg:#fbe6e4; --accent:#2f5fce; --muted:#6b7888;
+    --flag:#e8821a; --flag-bg:#fff4e4;
+    --shadow:0 1px 2px rgba(20,35,60,.06),0 4px 16px rgba(20,35,60,.06);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.4;padding:0 0 150px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:18px 16px}
+
+  /* ---------- top bar + tabs ---------- */
+  .appbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;margin-bottom:14px}
+  .appbar h1{font-size:1.3rem;margin:0;font-weight:800;letter-spacing:.2px}
+  .appbar .sub{color:var(--muted);font-size:.85rem}
+  .appbar-title{margin-right:auto}
+  .info-tab{
+    background:#fff;border:1.5px solid var(--line-strong);border-radius:11px;
+    padding:9px 16px;font-weight:700;font-size:.9rem;cursor:pointer;color:var(--accent);
+    box-shadow:var(--shadow);transition:.15s;flex:none;
+  }
+  .info-tab:hover{background:#f3f6fb}
+  .info-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .tabs{display:flex;gap:6px;background:#e1e6ee;padding:5px;border-radius:12px}
+  .tab{
+    border:none;background:transparent;padding:9px 18px;border-radius:9px;font-weight:700;
+    font-size:.9rem;cursor:pointer;color:var(--muted);transition:.15s;
+  }
+  .tab.active{background:#fff;color:var(--ink);box-shadow:var(--shadow)}
+  @media(max-width:620px){
+    .appbar-title{order:-1;width:100%;margin-right:0}
+    .info-tab{flex:none}
+    .tabs{margin-left:auto}
+  }
+
+  /* ---------- controls row ---------- */
+  .controls{
+    display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-bottom:18px;
+    background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);
+  }
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-weight:700;font-size:.78rem;color:var(--muted);letter-spacing:.3px;text-transform:uppercase}
+  select,input[type=number],input[type=text]{
+    border:1.5px solid var(--line-strong);border-radius:9px;padding:10px 12px;font-size:.95rem;
+    background:#fff;color:var(--ink);font-family:inherit;min-height:42px;
+  }
+  select{cursor:pointer;appearance:none;-webkit-appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7888' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;min-width:120px}
+  select:focus,input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .field.cls select{font-weight:800;font-size:1.05rem;min-width:130px}
+  .btn{
+    border:none;border-radius:10px;padding:11px 20px;font-weight:700;font-size:.9rem;cursor:pointer;
+    min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.primary:hover{background:#2850b8}
+  .btn.ghost{background:#fff;border:1.5px solid var(--line-strong);color:var(--ink)}
+  .btn.ghost:hover{background:#f3f6fb}
+  .btn.green{background:var(--good);color:#fff}
+  .btn.green:hover{background:#268a4e}
+  .btn.danger{background:#fff;border:1.5px solid var(--bad);color:var(--bad)}
+  .btn.danger:hover{background:var(--bad-bg)}
+  .btn-group{display:flex;gap:10px}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .top-actions{display:flex;gap:10px;align-items:flex-end}
+  .save-row{display:flex;justify-content:flex-end;margin:20px 0 4px}
+  .btn.big{padding:14px 32px;font-size:1rem}
+  @media(max-width:620px){.save-row .btn.big{width:100%}}
+  @media(max-width:620px){
+    .top-actions{width:100%;margin-top:4px}
+    .top-actions .btn{flex:1}
+    .controls{padding:14px}
+    .field.cls{flex:1}
+    .field.cls select{width:100%}
+    /* compact dock: percentages stack tightly, pills kept */
+    .dock{padding:9px 12px}
+    .dock-inner{gap:9px}
+    .score{flex:1 1 100%;padding:9px 12px;gap:11px}
+    .score .pct{font-size:1.45rem;min-width:66px}
+    .score .meta{font-size:.7rem}
+    .breakdown{margin-top:4px;gap:6px}
+    body{padding-bottom:230px}
+  }
+
+  /* ---------- photo panel ---------- */
+  .photo-panel{
+    background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:18px;
+    box-shadow:var(--shadow);
+  }
+  .photo-panel h3{margin:0 0 4px;font-size:1rem}
+  .photo-panel p.hint{margin:0 0 12px;color:var(--muted);font-size:.85rem}
+  .photo-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .preview{margin-top:14px;display:none}
+  .preview img{max-width:100%;max-height:340px;border-radius:10px;border:1px solid var(--line);display:block}
+  .status{margin-top:12px;font-size:.9rem;display:none;padding:10px 14px;border-radius:9px}
+  .status.show{display:block}
+  .status.working{background:#eef3ff;color:#2850b8}
+  .status.error{background:var(--bad-bg);color:#b3241b}
+  .status.ok{background:var(--good-bg);color:#1f7a44}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid #b9c9f0;border-top-color:#2850b8;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .flag-banner{
+    display:none;margin-bottom:14px;background:var(--flag-bg);border:1.5px solid var(--flag);
+    color:#9a5a10;border-radius:11px;padding:11px 15px;font-size:.9rem;font-weight:600;
+  }
+  .flag-banner.show{display:block}
+
+  /* ---------- grid (calculator) ---------- */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:920px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:620px){.grid{grid-template-columns:1fr}}
+  .block{background:var(--paper);border:1.5px solid #111;border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
+  .block h2{margin:0;font-size:.95rem;font-weight:800;letter-spacing:.6px;text-align:center;
+    padding:10px;background:#f3f6fb;border-bottom:1.5px solid #111;text-transform:uppercase}
+  .block.clean h2{background:#eef4ff}
+  table{width:100%;border-collapse:collapse;font-size:.82rem;border:1.5px solid #111}
+  th,td{padding:0;text-align:center;border:1px solid #111}
+  thead th{font-size:.72rem;color:var(--muted);font-weight:700;padding:6px 2px;border:1px solid #111;background:#f3f6fb}
+  .col-no{width:30px}.col-lbl{width:64px}
+  td.no{font-weight:700;color:var(--muted);font-size:.78rem}
+  td.lbl{font-weight:700;color:var(--muted);font-size:.72rem;white-space:nowrap}
+  .cell{padding:4px 3px}
+  .face{width:30px;height:30px;border-radius:6px;border:1.5px solid #111;background:#fff;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;
+    transition:transform .06s ease,background .12s ease,border-color .12s ease;padding:0}
+  .face:hover{transform:scale(1.08)}
+  .face:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .face svg{width:18px;height:18px;display:block;color:#aab4c2}
+  .face.on.good{background:var(--good-bg);border-color:var(--good)}.face.on.good svg{color:var(--good)}
+  .face.on.okay{background:var(--okay-bg);border-color:var(--okay)}.face.on.okay svg{color:var(--okay)}
+  .face.on.bad{background:var(--bad-bg);border-color:var(--bad)}.face.on.bad svg{color:var(--bad)}
+  tr.blank-row td.no,tr.blank-row td.lbl{color:#c2350c}
+  tr.flagged{background:var(--flag-bg)}
+  tr.flagged td.no,tr.flagged td.lbl{color:var(--flag)}
+  tr.flagged td:first-child{box-shadow:inset 3px 0 0 var(--flag)}
+  td.confirm{width:30px;padding:2px}
+  .confirm-btn{
+    width:24px;height:24px;border-radius:6px;border:1.5px solid var(--flag);background:var(--flag-bg);
+    color:var(--flag);cursor:pointer;display:none;align-items:center;justify-content:center;padding:0;
+    font-size:14px;line-height:1;font-weight:900;
+  }
+  tr.flagged .confirm-btn{display:inline-flex}
+  .confirm-btn:hover{background:var(--flag);color:#fff}
+
+  /* ---------- results dock ---------- */
+  .dock{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line-strong);
+    box-shadow:0 -4px 20px rgba(20,35,60,.08);padding:12px 16px;z-index:20}
+  .dock-inner{max-width:1180px;margin:0 auto;display:flex;gap:16px;align-items:stretch;flex-wrap:wrap}
+  .score{flex:1 1 230px;border:1px solid var(--line);border-radius:12px;padding:12px 16px;
+    display:flex;align-items:center;gap:14px;background:#fbfcfe}
+  .score .pct{font-size:1.9rem;font-weight:800;line-height:1;min-width:90px}
+  .score.beh .pct{color:var(--accent)}.score.cln .pct{color:#1f9d74}
+  .score .meta{font-size:.78rem;color:var(--muted)}.score .meta b{color:var(--ink)}
+  .score .title{font-size:.74rem;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+  .breakdown{display:flex;gap:8px;margin-top:5px;font-size:.72rem;flex-wrap:wrap}
+  .pill{padding:1px 7px;border-radius:20px;font-weight:700}
+  .pill.good{background:var(--good-bg);color:var(--good)}.pill.okay{background:var(--okay-bg);color:var(--okay)}
+  .pill.bad{background:var(--bad-bg);color:var(--bad)}.pill.blank{background:#eef1f5;color:#6b7888}
+  .dock-actions{display:flex;align-items:center;gap:10px}
+
+  /* ---------- results tab ---------- */
+  .results-head{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-bottom:16px}
+  .res-table-wrap{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+  table.results{width:100%;border-collapse:collapse;font-size:.9rem;border:none}
+  table.results th,table.results td{border:none;border-bottom:1px solid #eef1f5;padding:11px 14px;text-align:left}
+  table.results thead th{background:#f3f6fb;font-size:.74rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:800}
+  table.results td.cls{font-weight:800}
+  table.results td.pct{font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+  table.results td.empty{color:#c0c8d2}
+  table.results td.del{width:42px;text-align:center;padding:6px}
+  .row-del{border:none;background:transparent;color:#c0c8d2;cursor:pointer;font-size:16px;
+    width:28px;height:28px;border-radius:6px;line-height:1;padding:0}
+  .row-del:hover{background:var(--bad-bg);color:var(--bad)}
+  table.results tr:hover td{background:#fafbfd}
+  .pct-good{color:var(--good)}.pct-mid{color:var(--okay)}.pct-low{color:var(--bad)}
+  .grade-band td{background:#eef2f8 !important;font-weight:800;font-size:.8rem;letter-spacing:.5px;color:#46566b}
+  .summary-meta{color:var(--muted);font-size:.85rem;margin:2px 0 0}
+  .hidden{display:none !important}
+  .count-chip{background:#eef2f8;border-radius:20px;padding:3px 11px;font-size:.78rem;font-weight:700;color:#46566b}
+
+  /* ---------- info tab ---------- */
+  .info-wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  .info-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow)}
+  .info-card.intro{background:#f5f8ff;border-color:#cfe0ff}
+  .info-card.warn{background:var(--flag-bg);border-color:#f3c98a}
+  .info-card h2{margin:0 0 8px;font-size:1.15rem}
+  .info-card h3{margin:0 0 10px;font-size:1rem;display:flex;align-items:center;gap:10px}
+  .info-card p{margin:0 0 10px;font-size:.92rem;color:#33404f;line-height:1.55}
+  .info-card p:last-child{margin-bottom:0}
+  .info-card ul{margin:0;padding-left:20px}
+  .info-card li{font-size:.92rem;color:#33404f;line-height:1.55;margin-bottom:7px}
+  .info-card li:last-child{margin-bottom:0}
+  .step-no{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
+    border-radius:50%;background:var(--accent);color:#fff;font-size:.85rem;font-weight:800;flex:none}
+  .info-card .tip{background:#eef3ff;border-radius:8px;padding:9px 12px;font-size:.86rem;color:#2850b8}
+  .info-card.warn h3{color:#9a5a10}
+  .flag-word{color:var(--flag)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="appbar">
+    <button class="tab info-tab" data-tab="info" title="How to use this app" aria-label="Information">ⓘ Info</button>
+    <div class="appbar-title">
+      <h1>Behaviour &amp; Cleanliness Tracker</h1>
+      <div class="sub">2026&ndash;27 &middot; weekly &middot; <b style="color:#d99100">TEST (free Gemini)</b></div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="entry">Enter sheet</button>
+      <button class="tab" data-tab="results">Results</button>
+    </div>
+  </div>
+
+  <!-- ===================== INFO TAB ===================== -->
+  <section id="tab-info" class="hidden">
+    <div class="info-wrap">
+
+      <div class="info-card intro">
+        <h2>What this app does</h2>
+        <p>This app works out the weekly <b>Behaviour</b> and <b>Cleanliness</b> score for each class from its paper tracker sheet. You take a photo of the sheet, the app reads the ticks for you, you check it, and it gives you two percentages. You do this once for each of the 24 classes every week.</p>
+      </div>
+
+      <div class="info-card">
+        <h3><span class="step-no">1</span> Pick the class and check the week</h3>
+        <p>At the top of <b>Enter sheet</b>, choose the class whose sheet you are holding from the <b>Class</b> dropdown. It starts empty on purpose, so you always choose consciously — you cannot save without picking one.</p>
+        <p>The <b>Week no.</b> fills in automatically from today's date. You only change it if you are entering a sheet for a different week.</p>
+      </div>
+
+      <div class="info-card">
+        <h3><span class="step-no">2</span> Read the sheet from a photo</h3>
+        <p>Tap <b>Take / choose photo</b>. Your phone lets you either take a new photo or pick one from your gallery. Take a clear, flat photo of the whole sheet in good light, with no shadow or blur.</p>
+        <p>You will see a preview. If it looks good, tap <b>Read this sheet</b>. Wait a few seconds — the app is reading all the ticks. If the photo is bad, tap <b>Choose a different photo</b> and try again.</p>
+        <p class="tip">Tip: you don't have to use a photo at all. You can fill the sheet in by hand instead (see step 4). The photo is just there to save time.</p>
+      </div>
+
+      <div class="info-card">
+        <h3><span class="step-no">3</span> Check the result carefully</h3>
+        <p>The grid fills in automatically with what the app read — green for Good, amber for Okay, red for Bad, and empty for blank (unsigned) rows.</p>
+        <p>Some rows may be <b class="flag-word">highlighted in orange</b>. These are rows the app was not fully sure about. A banner at the top tells you how many. Look at each highlighted row and compare it with the paper:</p>
+        <ul>
+          <li>If it is <b>wrong</b>, tap the correct face to fix it.</li>
+          <li>If it is <b>correct</b> (including a correct blank row), tap the orange <b>✓</b> on that row to confirm it.</li>
+          <li>Or use <b>Confirm all as correct</b> in the banner if every highlighted row is fine.</li>
+        </ul>
+        <p>You can change <i>any</i> row at any time, not just the highlighted ones — just tap a face to set it, or tap it again to clear it back to blank.</p>
+      </div>
+
+      <div class="info-card">
+        <h3><span class="step-no">4</span> Marking by hand (no photo)</h3>
+        <p>If you'd rather not use a photo, just click the faces directly to match the paper sheet. Each row has Good, Okay and Bad. A row you leave untouched counts as blank. This works exactly the same and costs nothing.</p>
+      </div>
+
+      <div class="info-card">
+        <h3><span class="step-no">5</span> Read the score and save</h3>
+        <p>At the bottom of the screen, two cards always show the live <b>Behaviour %</b> and <b>Cleanliness %</b>, with a breakdown of how many Good, Okay, Bad and Blank there are. The score updates as you make changes.</p>
+        <p>When you are happy, scroll to the bottom and tap <b>Save &amp; next ›</b>. This saves the score for that class and that week. The class dropdown then resets to empty, ready for the next sheet.</p>
+        <p class="tip">If a class already has a score saved for that week, it asks before overwriting — so you never get duplicates.</p>
+      </div>
+
+      <div class="info-card">
+        <h3><span class="step-no">6</span> See and download all results</h3>
+        <p>Go to the <b>Results</b> tab. Pick a week, and you'll see all 24 classes grouped by grade, with each one's Behaviour % and Cleanliness %. Classes you haven't done yet show a dash (—). The chip tells you how many of 24 are done.</p>
+        <p>Tap <b>Download Excel</b> to save that week's table as a spreadsheet file — this is how you share the results with the school and keep a record.</p>
+      </div>
+
+      <div class="info-card warn">
+        <h3>Important things to remember</h3>
+        <ul>
+          <li><b>Use one device for the whole week.</b> Scores are saved on the device you're using, not in a shared place. Do all the sheets for a week on the same phone or laptop.</li>
+          <li><b>Always download the Excel file after finishing a week.</b> That's your safe copy. If the browser data is ever cleared, anything not downloaded is lost.</li>
+          <li><b>Always check before saving.</b> The app reads the sheet, but you confirm it. A quick look at the highlighted rows is all it takes.</li>
+        </ul>
+      </div>
+
+      <div class="info-card">
+        <h3>How the score is worked out</h3>
+        <p>Each mark is worth points: <b>Good = 3, Okay = 2, Bad = 1, Blank = 0</b>. The percentage is the points earned out of the maximum possible (every slot counted as if it were Good).</p>
+        <p>This means <b>blank (unsigned) periods lower the score</b> — they count in the total but earn nothing. Behaviour is out of 50 periods a week; Cleanliness is out of 10. The two are worked out completely separately.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== ENTRY TAB ===================== -->
+  <section id="tab-entry">
+
+    <div class="controls">
+      <div class="field cls">
+        <label for="classSel">Class</label>
+        <select id="classSel"></select>
+      </div>
+      <div class="field">
+        <label for="weekNum">Week no.</label>
+        <input type="number" id="weekNum" min="1" max="53" style="width:96px">
+      </div>
+      <div class="field" style="flex:1"></div>
+      <div class="top-actions">
+        <button class="btn ghost" id="clearBtn">Clear</button>
+      </div>
+    </div>
+
+    <div class="photo-panel">
+      <h3>Read from photo <span style="font-weight:400;color:var(--muted);font-size:.85rem">(optional)</span></h3>
+      <p class="hint">Take or choose a clear, flat photo of the whole sheet in good light. You'll preview it, then review the result before it's saved.</p>
+      <div class="photo-actions">
+        <input type="file" id="fileInput" accept="image/*" class="hidden">
+        <button class="btn ghost" id="chooseBtn">📷 Take / choose photo</button>
+        <button class="btn primary hidden" id="readBtn">Read this sheet</button>
+        <button class="btn ghost hidden" id="retakeBtn">Choose a different photo</button>
+      </div>
+      <div class="preview" id="preview"><img id="previewImg" alt="sheet preview"></div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="flag-banner" id="flagBanner"></div>
+
+    <div class="grid" id="grid"></div>
+
+    <div class="save-row">
+      <button class="btn green big" id="saveBtn">Save &amp; next ›</button>
+    </div>
+  </section>
+
+  <!-- ===================== RESULTS TAB ===================== -->
+  <section id="tab-results" class="hidden">
+    <div class="results-head">
+      <div class="field">
+        <label for="weekPick">Week</label>
+        <select id="weekPick"></select>
+      </div>
+      <span class="count-chip" id="weekCount">0 of 24 classes</span>
+      <div style="flex:1"></div>
+      <div class="btn-group">
+        <button class="btn ghost" id="copyBtn">Copy results</button>
+        <button class="btn green" id="exportBtn">Download Excel</button>
+      </div>
+      <button class="btn danger" id="delWeekBtn" style="margin-left:14px">Delete week</button>
+    </div>
+    <div class="res-table-wrap">
+      <table class="results">
+        <thead><tr><th>Class</th><th style="text-align:right">Behaviour&nbsp;%</th><th style="text-align:right">Cleanliness&nbsp;%</th><th></th></tr></thead>
+        <tbody id="resBody"></tbody>
+      </table>
+    </div>
+    <p class="summary-meta">Scores are saved on this device. Remember to download the Excel file after finishing a week.</p>
+  </section>
+
+</div>
+
+<!-- results dock (entry tab only) -->
+<div class="dock" id="dock">
+  <div class="dock-inner">
+    <div class="score beh">
+      <div class="pct" id="behPct">0.0%</div>
+      <div>
+        <div class="title">Behaviour</div>
+        <div class="meta">Marked <b id="behMarked">0</b>/50 &middot; Points <b id="behPts">0</b>/150</div>
+        <div class="breakdown" id="behBreak"></div>
+      </div>
+    </div>
+    <div class="score cln">
+      <div class="pct" id="clnPct">0.0%</div>
+      <div>
+        <div class="title">Cleanliness</div>
+        <div class="meta">Marked <b id="clnMarked">0</b>/10 &middot; Points <b id="clnPts">0</b>/30</div>
+        <div class="breakdown" id="clnBreak"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ====== CONFIG ====== */
+/* TEST VERSION — uses free Gemini reading via a separate Cloudflare Worker.
+   Replace the URL below with your Gemini worker's address once created. */
+const WORKER_URL = "https://tracker-gemini.advik1780.workers.dev";
+const STORAGE_KEY = "tracker_results_gemini_v1";
+
+/* ====== constants ====== */
+const FACES = {
+  good:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><circle cx="8.5" cy="10" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.1" fill="currentColor" stroke="none"/><path d="M8 14.5c1 1.6 2.4 2.4 4 2.4s3-.8 4-2.4"/></svg>',
+  okay:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><circle cx="8.5" cy="10" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.1" fill="currentColor" stroke="none"/><path d="M8.2 15h7.6"/></svg>',
+  bad:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><circle cx="8.5" cy="10" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.1" fill="currentColor" stroke="none"/><path d="M8 16.6c1-1.6 2.4-2.4 4-2.4s3 .8 4 2.4"/></svg>'
+};
+const ORDER=['good','okay','bad'];
+const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday'];
+const DAYKEYS=['monday','tuesday','wednesday','thursday','friday'];
+const CLEAN_LABELS=['MON-3rd','MON-7th','TUE-3rd','TUE-7th','WED-3rd','WED-7th','THU-3rd','THU-7th','FRI-3rd','FRI-7th'];
+
+const GRADES=[3,4,5,6,7,8,9,10], SECTIONS=['A','B','C'];
+const CLASSES=[];
+GRADES.forEach(g=>SECTIONS.forEach(s=>CLASSES.push(g+s)));
+
+const state={};   // cellId -> good|okay|bad|null
+const flagged=new Set();
+
+/* ====== ISO week number ====== */
+function isoWeek(d){
+  d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const day=d.getUTCDay()||7;
+  d.setUTCDate(d.getUTCDate()+4-day);
+  const yearStart=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return Math.ceil((((d-yearStart)/86400000)+1)/7);
+}
+
+/* ====== build dropdowns ====== */
+function buildClassDropdown(){
+  const sel=document.getElementById('classSel');
+  sel.innerHTML='';
+  const ph=document.createElement('option');
+  ph.value='';ph.textContent='— Select class —';ph.disabled=true;ph.selected=true;
+  sel.appendChild(ph);
+  CLASSES.forEach(c=>{
+    const o=document.createElement('option');o.value=c;o.textContent='Class '+c;sel.appendChild(o);
+  });
+}
+
+/* ====== build grid ====== */
+function makeFace(id,kind){
+  const b=document.createElement('button');
+  b.className='face '+kind;b.type='button';b.innerHTML=FACES[kind];
+  b.setAttribute('aria-label',kind);b.dataset.id=id;b.dataset.kind=kind;
+  b.addEventListener('click',()=>toggle(id,kind));
+  return b;
+}
+function toggle(id,kind){
+  state[id]=(state[id]===kind)?null:kind;
+  if(flagged.has(id)){flagged.delete(id);}   // touching a flagged row clears its flag
+  render();
+}
+function confirmRow(id){
+  flagged.delete(id);
+  render();
+}
+function buildBlock(title,rows,isClean){
+  const block=document.createElement('div');block.className='block'+(isClean?' clean':'');
+  const h=document.createElement('h2');h.textContent=title;block.appendChild(h);
+  const table=document.createElement('table');
+  table.innerHTML=`<thead><tr><th class="${isClean?'col-lbl':'col-no'}">${isClean?'Day':'No.'}</th><th>Good</th><th>Okay</th><th>Bad</th><th class="col-confirm"></th></tr></thead>`;
+  const tb=document.createElement('tbody');
+  rows.forEach(rd=>{
+    const tr=document.createElement('tr');tr.dataset.row=rd.id;
+    const first=document.createElement('td');first.className=isClean?'lbl':'no';first.textContent=rd.label;tr.appendChild(first);
+    ORDER.forEach(kind=>{const td=document.createElement('td');td.className='cell';td.appendChild(makeFace(rd.id,kind));tr.appendChild(td);});
+    const ctd=document.createElement('td');ctd.className='confirm';
+    const cb=document.createElement('button');cb.className='confirm-btn';cb.type='button';
+    cb.innerHTML='✓';cb.title='Confirm this row is correct';
+    cb.setAttribute('aria-label','Confirm row '+rd.label);
+    cb.addEventListener('click',()=>confirmRow(rd.id));
+    ctd.appendChild(cb);tr.appendChild(ctd);
+    tb.appendChild(tr);
+  });
+  table.appendChild(tb);block.appendChild(table);return block;
+}
+function buildGrid(){
+  const grid=document.getElementById('grid');grid.innerHTML='';
+  DAYS.forEach((day,di)=>{
+    const rows=[];for(let p=1;p<=10;p++)rows.push({id:`b_${di}_${p}`,label:String(p)});
+    grid.appendChild(buildBlock(day,rows,false));
+  });
+  const cleanRows=CLEAN_LABELS.map((l,i)=>({id:`c_${i}`,label:l}));
+  grid.appendChild(buildBlock('Cleanliness',cleanRows,true));
+}
+
+/* ====== scoring ====== */
+function countSet(prefix,total){
+  const c={good:0,okay:0,bad:0,blank:0};
+  Object.keys(state).forEach(id=>{if(id.startsWith(prefix)&&state[id])c[state[id]]++;});
+  c.blank=total-(c.good+c.okay+c.bad);return c;
+}
+function score(c,total){
+  const pts=c.good*3+c.okay*2+c.bad*1, max=total*3;
+  return {pts,max,pct:max?(pts/max*100):0,marked:c.good+c.okay+c.bad};
+}
+function breakHTML(c){
+  return `<span class="pill good">G ${c.good}</span><span class="pill okay">O ${c.okay}</span><span class="pill bad">B ${c.bad}</span><span class="pill blank">Blank ${c.blank}</span>`;
+}
+function currentScores(){
+  const beh=countSet('b_',50), cln=countSet('c_',10);
+  return {beh:score(beh,50),cln:score(cln,10),behC:beh,clnC:cln};
+}
+function render(){
+  document.querySelectorAll('.face').forEach(b=>{
+    b.classList.toggle('on',state[b.dataset.id]===b.dataset.kind);
+  });
+  document.querySelectorAll('#grid tbody tr').forEach(tr=>{
+    tr.classList.toggle('blank-row',!state[tr.dataset.row]);
+    tr.classList.toggle('flagged',flagged.has(tr.dataset.row));
+  });
+  const s=currentScores();
+  behPct.textContent=s.beh.pct.toFixed(1)+'%';behMarked.textContent=s.beh.marked;behPts.textContent=s.beh.pts;behBreak.innerHTML=breakHTML(s.behC);
+  clnPct.textContent=s.cln.pct.toFixed(1)+'%';clnMarked.textContent=s.cln.marked;clnPts.textContent=s.cln.pts;clnBreak.innerHTML=breakHTML(s.clnC);
+
+  // flag banner
+  const fb=document.getElementById('flagBanner');
+  if(flagged.size){fb.classList.add('show');
+    fb.innerHTML=`⚠ ${flagged.size} row${flagged.size>1?'s':''} need a quick check — highlighted below. For each: fix it by clicking a face, or tap the orange ✓ to confirm it's correct (including blank rows). <button class="btn ghost" id="confirmAllBtn" style="padding:4px 12px;min-height:auto;font-size:.82rem;margin-left:6px">Confirm all as correct</button>`;
+    const ca=document.getElementById('confirmAllBtn');
+    if(ca)ca.addEventListener('click',()=>{flagged.clear();render();});
+  }
+  else fb.classList.remove('show');
+}
+
+/* ====== clear ====== */
+function clearGrid(){for(const k in state)delete state[k];flagged.clear();render();}
+
+/* ====== TABS ====== */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    const which=t.dataset.tab;
+    document.getElementById('tab-info').classList.toggle('hidden',which!=='info');
+    document.getElementById('tab-entry').classList.toggle('hidden',which!=='entry');
+    document.getElementById('tab-results').classList.toggle('hidden',which!=='results');
+    document.getElementById('dock').style.display=(which==='entry')?'':'none';
+    if(which==='results')renderResults();
+    if(which==='info')window.scrollTo({top:0,behavior:'smooth'});
+  });
+});
+
+/* ====== STORAGE (in-memory + best-effort localStorage) ====== */
+let store={};   // { week: { class: {beh, cln} } }
+function loadStore(){
+  try{const raw=localStorage.getItem(STORAGE_KEY);if(raw)store=JSON.parse(raw);}catch(e){store={};}
+}
+function saveStore(){
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(store));}catch(e){/* private mode: stays in memory */}
+}
+
+/* ====== SAVE ====== */
+document.getElementById('saveBtn').addEventListener('click',()=>{
+  const cls=document.getElementById('classSel').value;
+  const wk=parseInt(document.getElementById('weekNum').value,10);
+  if(!cls){alert('Please select a class before saving.');document.getElementById('classSel').focus();return;}
+  if(!wk){alert('Please set a week number first.');return;}
+  const s=currentScores();
+  if(s.beh.marked===0 && s.cln.marked===0){
+    if(!confirm('Nothing is marked on this sheet. Save it as 0 anyway?'))return;
+  }
+  store[wk]=store[wk]||{};
+  if(store[wk][cls]){
+    if(!confirm(`Class ${cls} already has a score for week ${wk}. Overwrite it?`))return;
+  }
+  store[wk][cls]={beh:+s.beh.pct.toFixed(1),cln:+s.cln.pct.toFixed(1)};
+  saveStore();
+  // reset to empty class so next sheet must be chosen consciously
+  document.getElementById('classSel').selectedIndex=0;
+  clearGrid();
+  resetPhoto();
+  window.scrollTo({top:0,behavior:'smooth'});
+  flash(`Saved ${cls} — Behaviour ${s.beh.pct.toFixed(1)}%, Cleanliness ${s.cln.pct.toFixed(1)}%. Select the next class to continue.`);
+});
+document.getElementById('clearBtn').addEventListener('click',clearGrid);
+
+function flash(msg){
+  const st=document.getElementById('status');
+  st.className='status ok show';st.textContent='✓ '+msg;
+  setTimeout(()=>{if(st.classList.contains('ok'))st.classList.remove('show');},4000);
+}
+
+/* ====== PHOTO FLOW ====== */
+let pickedBase64=null, pickedMime='image/jpeg';
+const fileInput=document.getElementById('fileInput');
+document.getElementById('chooseBtn').addEventListener('click',()=>fileInput.click());
+document.getElementById('retakeBtn').addEventListener('click',()=>fileInput.click());
+
+fileInput.addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  pickedMime=f.type||'image/jpeg';
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const dataUrl=reader.result;
+    pickedBase64=dataUrl.split(',')[1];
+    document.getElementById('previewImg').src=dataUrl;
+    document.getElementById('preview').style.display='block';
+    document.getElementById('readBtn').classList.remove('hidden');
+    document.getElementById('retakeBtn').classList.remove('hidden');
+    const st=document.getElementById('status');st.classList.remove('show');
+  };
+  reader.readAsDataURL(f);
+});
+
+function resetPhoto(){
+  pickedBase64=null;fileInput.value='';
+  document.getElementById('preview').style.display='none';
+  document.getElementById('readBtn').classList.add('hidden');
+  document.getElementById('retakeBtn').classList.add('hidden');
+}
+
+document.getElementById('readBtn').addEventListener('click',async()=>{
+  if(!pickedBase64)return;
+  const st=document.getElementById('status');
+  st.className='status working show';st.innerHTML='<span class="spinner"></span>Reading the sheet… this takes a few seconds.';
+  document.getElementById('readBtn').disabled=true;
+  try{
+    const res=await fetch(WORKER_URL,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({image:pickedBase64,mediaType:pickedMime})
+    });
+    const data=await res.json();
+    if(data.error){throw new Error(data.error);}
+    const parsed=parseReading(data.raw);
+    applyReading(parsed);
+    st.className='status ok show';
+    st.textContent='✓ Sheet read. Check the highlighted rows below, fix anything wrong, then Save.';
+  }catch(err){
+    st.className='status error show';
+    st.textContent='Could not read the sheet: '+err.message+'. You can still mark it by hand below, or try another photo.';
+  }finally{
+    document.getElementById('readBtn').disabled=false;
+  }
+});
+
+function parseReading(raw){
+  // strip any code fences / extra text, grab the JSON object
+  let t=raw.replace(/```json/gi,'').replace(/```/g,'').trim();
+  const start=t.indexOf('{'), end=t.lastIndexOf('}');
+  if(start>=0&&end>=0)t=t.slice(start,end+1);
+  return JSON.parse(t);
+}
+function valid(v){return ['good','okay','bad','blank'].includes(v)?v:'blank';}
+function applyReading(p){
+  clearGrid();
+  if(p.behaviour){
+    DAYKEYS.forEach((dk,di)=>{
+      const arr=p.behaviour[dk]||[];
+      for(let i=0;i<10;i++){
+        const v=valid(arr[i]);
+        if(v!=='blank')state[`b_${di}_${i+1}`]=v;
+      }
+    });
+  }
+  if(Array.isArray(p.cleanliness)){
+    for(let i=0;i<10;i++){const v=valid(p.cleanliness[i]);if(v!=='blank')state[`c_${i}`]=v;}
+  }
+  // map uncertain -> row ids
+  flagged.clear();
+  (p.uncertain||[]).forEach(u=>{
+    u=String(u).toLowerCase().trim();
+    if(u.startsWith('cleanliness-')){const n=parseInt(u.split('-')[1],10);if(n>=1&&n<=10)flagged.add(`c_${n-1}`);}
+    else{
+      const m=u.match(/^(monday|tuesday|wednesday|thursday|friday)-(\d+)$/);
+      if(m){const di=DAYKEYS.indexOf(m[1]);const p2=parseInt(m[2],10);if(di>=0&&p2>=1&&p2<=10)flagged.add(`b_${di}_${p2}`);}
+    }
+  });
+  render();
+  // scroll to grid
+  document.getElementById('grid').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* ====== RESULTS TAB ====== */
+function pctClass(v){return v>=85?'pct-good':v>=70?'pct-mid':'pct-low';}
+function renderWeekPicker(keepWeek){
+  const wp=document.getElementById('weekPick');
+  const weeks=Object.keys(store).map(Number);
+  const cur=parseInt(document.getElementById('weekNum').value,10);
+  if(!weeks.includes(cur))weeks.push(cur);
+  if(keepWeek!=null && !weeks.includes(keepWeek))weeks.push(keepWeek);
+  weeks.sort((a,b)=>b-a);
+  wp.innerHTML='';
+  weeks.forEach(w=>{const o=document.createElement('option');o.value=w;o.textContent='Week '+w;wp.appendChild(o);});
+  wp.value=(keepWeek!=null)?keepWeek:cur;
+}
+function renderResults(){
+  renderWeekPicker();
+  drawResultsTable();
+}
+document.getElementById('weekPick').addEventListener('change',drawResultsTable);
+function drawResultsTable(){
+  const wk=parseInt(document.getElementById('weekPick').value,10);
+  const data=store[wk]||{};
+  const body=document.getElementById('resBody');body.innerHTML='';
+  let done=0;
+  GRADES.forEach(g=>{
+    const band=document.createElement('tr');band.className='grade-band';
+    band.innerHTML=`<td colspan="4">Grade ${g}</td>`;body.appendChild(band);
+    SECTIONS.forEach(s=>{
+      const cls=g+s;const rec=data[cls];
+      const tr=document.createElement('tr');
+      if(rec){done++;
+        tr.innerHTML=`<td class="cls">${cls}</td>
+          <td class="pct ${pctClass(rec.beh)}">${rec.beh.toFixed(1)}%</td>
+          <td class="pct ${pctClass(rec.cln)}">${rec.cln.toFixed(1)}%</td>
+          <td class="del"><button class="row-del" title="Delete ${cls} for week ${wk}" aria-label="Delete ${cls}">✕</button></td>`;
+        tr.querySelector('.row-del').addEventListener('click',()=>deleteClass(wk,cls));
+      }else{
+        tr.innerHTML=`<td class="cls">${cls}</td><td class="pct empty">—</td><td class="pct empty">—</td><td class="del"></td>`;
+      }
+      body.appendChild(tr);
+    });
+  });
+  document.getElementById('weekCount').textContent=`${done} of 24 classes`;
+}
+
+/* ====== delete a single class for the selected week ====== */
+function deleteClass(wk,cls){
+  if(!store[wk]||!store[wk][cls])return;
+  if(!confirm(`Delete the score for class ${cls} in week ${wk}? This cannot be undone.`))return;
+  delete store[wk][cls];
+  if(store[wk] && Object.keys(store[wk]).length===0)delete store[wk];
+  saveStore();
+  renderWeekPicker(wk);
+  drawResultsTable();
+}
+
+/* ====== delete a whole week ====== */
+document.getElementById('delWeekBtn').addEventListener('click',()=>{
+  const wk=parseInt(document.getElementById('weekPick').value,10);
+  const data=store[wk]||{};
+  const n=Object.keys(data).length;
+  if(n===0){alert(`Week ${wk} has no saved scores to delete.`);return;}
+  if(!confirm(`Delete ALL ${n} saved class score${n>1?'s':''} for week ${wk}? This cannot be undone.`))return;
+  delete store[wk];
+  saveStore();
+  renderWeekPicker(wk);
+  drawResultsTable();
+});
+
+/* ====== copy results as a readable list ====== */
+document.getElementById('copyBtn').addEventListener('click',()=>{
+  const wk=parseInt(document.getElementById('weekPick').value,10);
+  const data=store[wk]||{};
+  let text=`Behaviour & Cleanliness — Week ${wk}\n\n`;
+  let any=false;
+  CLASSES.forEach(cls=>{
+    const r=data[cls];
+    if(r){any=true;text+=`${cls} — Behaviour ${r.beh.toFixed(1)}%, Cleanliness ${r.cln.toFixed(1)}%\n`;}
+  });
+  if(!any){alert(`Week ${wk} has no saved scores to copy.`);return;}
+  const btn=document.getElementById('copyBtn');
+  navigator.clipboard.writeText(text.trim()).then(()=>{
+    const old=btn.textContent;btn.textContent='Copied ✓';
+    setTimeout(()=>btn.textContent=old,1800);
+  }).catch(()=>{
+    // fallback for older browsers
+    const ta=document.createElement('textarea');ta.value=text.trim();document.body.appendChild(ta);
+    ta.select();try{document.execCommand('copy');}catch(e){}
+    document.body.removeChild(ta);
+    const old=btn.textContent;btn.textContent='Copied ✓';
+    setTimeout(()=>btn.textContent=old,1800);
+  });
+});
+
+/* ====== EXPORT (CSV that opens in Excel) ====== */
+document.getElementById('exportBtn').addEventListener('click',()=>{
+  const wk=parseInt(document.getElementById('weekPick').value,10);
+  const data=store[wk]||{};
+  let csv='Class,Behaviour %,Cleanliness %\n';
+  CLASSES.forEach(cls=>{
+    const r=data[cls];
+    csv+=`${cls},${r?r.beh.toFixed(1):''},${r?r.cln.toFixed(1):''}\n`;
+  });
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`behaviour_cleanliness_week_${wk}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+});
+
+/* ====== INIT ====== */
+buildClassDropdown();
+buildGrid();
+loadStore();
+document.getElementById('weekNum').value=isoWeek(new Date());
+render();
+</script>
+</body>
+</html>

@@ -111,6 +111,9 @@
   .status.ok{background:var(--good-bg);color:#1f7a44}
   .spinner{display:inline-block;width:14px;height:14px;border:2px solid #b9c9f0;border-top-color:#2850b8;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:7px}
   @keyframes spin{to{transform:rotate(360deg)}}
+  #refreshBtn.spinning{color:var(--accent);border-color:var(--accent)}
+  #refreshBtn .ref-ic{display:inline-block}
+  #refreshBtn.spinning .ref-ic{animation:spin .7s linear infinite}
 
   .flag-banner{
     display:none;margin-bottom:14px;background:var(--flag-bg);border:1.5px solid var(--flag);
@@ -344,7 +347,7 @@
         <select id="weekPick"></select>
       </div>
       <span class="count-chip" id="weekCount">0 of 24 classes</span>
-      <button class="btn ghost" id="refreshBtn" style="padding:6px 12px;min-height:auto;font-size:.82rem">↻ Refresh</button>
+      <button class="btn ghost" id="refreshBtn" style="padding:6px 12px;min-height:auto;font-size:.82rem"><span class="ref-ic">↻</span> Refresh</button>
       <div style="flex:1"></div>
       <div class="btn-group">
         <button class="btn ghost" id="copyBtn">Copy results</button>
@@ -532,9 +535,37 @@ document.querySelectorAll('.tab').forEach(t=>{
     document.getElementById('tab-entry').classList.toggle('hidden',which!=='entry');
     document.getElementById('tab-results').classList.toggle('hidden',which!=='results');
     document.getElementById('dock').style.display=(which==='entry')?'':'none';
-    if(which==='results')renderResults();
+    if(which==='results'){renderResults();startAutoRefresh();}
+    else stopAutoRefresh();
     if(which==='info')window.scrollTo({top:0,behavior:'smooth'});
   });
+});
+
+/* ====== AUTO-REFRESH (only while Results tab is open & visible) ====== */
+const AUTO_REFRESH_MS=25000;
+let autoTimer=null;
+function resultsTabOpen(){
+  return !document.getElementById('tab-results').classList.contains('hidden');
+}
+async function autoRefreshTick(){
+  if(!resultsTabOpen() || document.hidden)return;
+  const btn=document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  await loadStore();
+  renderResults();
+  setTimeout(()=>btn.classList.remove('spinning'),500);
+}
+function startAutoRefresh(){
+  stopAutoRefresh();
+  autoTimer=setInterval(autoRefreshTick,AUTO_REFRESH_MS);
+}
+function stopAutoRefresh(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;}
+}
+// pause when tab goes to background, resume (and refresh once) when it returns
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){/* timer keeps running but tick self-skips */}
+  else if(resultsTabOpen()){autoRefreshTick();}
 });
 
 /* ====== STORAGE (shared, via Cloudflare KV worker) ====== */
@@ -837,13 +868,14 @@ document.getElementById('exportBtn').addEventListener('click',()=>{
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
 });
 
-/* ====== refresh shared data ====== */
+/* ====== refresh shared data (manual) ====== */
 document.getElementById('refreshBtn').addEventListener('click',async()=>{
-  const btn=document.getElementById('refreshBtn');const old=btn.textContent;
-  btn.textContent='↻ …';btn.disabled=true;
+  const btn=document.getElementById('refreshBtn');
+  btn.classList.add('spinning');btn.disabled=true;
   await loadStore();
   renderResults();
-  btn.textContent=old;btn.disabled=false;
+  btn.disabled=false;
+  setTimeout(()=>btn.classList.remove('spinning'),400);
 });
 
 /* ====== INIT ====== */
@@ -851,7 +883,7 @@ buildClassDropdown();
 buildGrid();
 document.getElementById('weekNum').value=isoWeek(new Date());
 render();
-loadStore();   // pull shared results from the cloud
+loadStore();   // pull shared results from the cloud on every visit
 </script>
 </body>
 </html>

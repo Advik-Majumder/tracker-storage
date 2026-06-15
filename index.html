@@ -74,12 +74,6 @@
   .btn.danger:hover{background:var(--bad-bg)}
   .btn-group{display:flex;gap:10px}
   .updated-stamp{font-size:.76rem;color:var(--muted);font-style:italic}
-  .results-subtabs{display:flex;gap:6px;margin-bottom:14px}
-  .subtab{border:none;background:#e1e6ee;padding:8px 16px;border-radius:9px;font-weight:700;
-    font-size:.85rem;cursor:pointer;color:var(--muted);transition:.15s}
-  .subtab.active{background:#fff;color:var(--ink);box-shadow:var(--shadow)}
-  table.results td.histact{font-weight:700}
-  table.results td.histwhen{text-align:right;color:var(--muted);font-size:.82rem;white-space:nowrap}
   .btn:disabled{opacity:.5;cursor:not-allowed}
   .top-actions{display:flex;gap:10px;align-items:flex-end}
   .save-row{display:flex;justify-content:flex-end;margin:20px 0 4px}
@@ -364,30 +358,13 @@
       <button class="btn danger" id="delWeekBtn" style="margin-left:14px">Delete week</button>
     </div>
 
-    <div class="results-subtabs">
-      <button class="subtab active" id="subScores">Scores</button>
-      <button class="subtab" id="subHistory">Delete history</button>
+    <div class="res-table-wrap">
+      <table class="results">
+        <thead><tr><th>Class</th><th style="text-align:right">Behaviour&nbsp;%</th><th style="text-align:right">Cleanliness&nbsp;%</th><th></th></tr></thead>
+        <tbody id="resBody"></tbody>
+      </table>
     </div>
-
-    <div id="scoresView">
-      <div class="res-table-wrap">
-        <table class="results">
-          <thead><tr><th>Class</th><th style="text-align:right">Behaviour&nbsp;%</th><th style="text-align:right">Cleanliness&nbsp;%</th><th></th></tr></thead>
-          <tbody id="resBody"></tbody>
-        </table>
-      </div>
-      <p class="summary-meta">Results are shared online. Remember to download the Excel file after finishing a week.</p>
-    </div>
-
-    <div id="historyView" class="hidden">
-      <div class="res-table-wrap">
-        <table class="results">
-          <thead><tr><th>Action</th><th>What</th><th>By</th><th style="text-align:right">When</th></tr></thead>
-          <tbody id="histBody"></tbody>
-        </table>
-      </div>
-      <p class="summary-meta">A record of every deletion (class or week), with who did it and when. Most recent first.</p>
-    </div>
+    <p class="summary-meta">Results are shared online. Remember to download the Excel file after finishing a week.</p>
   </section>
 
 </div>
@@ -567,8 +544,7 @@ document.querySelectorAll('.tab').forEach(t=>{
   });
 });
 
-/* ====== AUTO-REFRESH (only while Results tab is open & visible) ====== */
-const AUTO_REFRESH_MS=25000;
+/* ====== AUTO-REFRESH (synced to the clock — fires at the top of each minute) ====== */
 let autoTimer=null;
 function resultsTabOpen(){
   return !document.getElementById('tab-results').classList.contains('hidden');
@@ -581,22 +557,29 @@ async function autoRefreshTick(){
   renderResults();
   setTimeout(()=>btn.classList.remove('spinning'),500);
 }
+function scheduleNextMinute(){
+  // ms until the next exact minute boundary (e.g. 7:02:00)
+  const now=new Date();
+  const ms=(60-now.getSeconds())*1000-now.getMilliseconds();
+  autoTimer=setTimeout(async()=>{
+    await autoRefreshTick();
+    scheduleNextMinute();   // chain to the following minute
+  },ms);
+}
 function startAutoRefresh(){
   stopAutoRefresh();
-  autoTimer=setInterval(autoRefreshTick,AUTO_REFRESH_MS);
+  scheduleNextMinute();
 }
 function stopAutoRefresh(){
-  if(autoTimer){clearInterval(autoTimer);autoTimer=null;}
+  if(autoTimer){clearTimeout(autoTimer);autoTimer=null;}
 }
-// pause when tab goes to background, resume (and refresh once) when it returns
+// refresh once when returning to a foregrounded tab
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden){/* timer keeps running but tick self-skips */}
-  else if(resultsTabOpen()){autoRefreshTick();}
+  if(!document.hidden && resultsTabOpen())autoRefreshTick();
 });
 
 /* ====== STORAGE (shared, via Cloudflare KV worker) ====== */
 let store={};            // { week: { class: {beh, cln, by, at} } }
-let delLog=[];           // [{action, who, when, detail}]
 let lastUpdated=null;
 let session={name:null,password:null};  // remembered after first unlock this visit
 
@@ -612,7 +595,6 @@ async function loadStore(){
     const res=await fetch(STORE_URL+'/load');
     const data=await res.json();
     store=data.store||{};
-    delLog=data.log||[];
     lastUpdated=new Date();
     updateStamp();
     const rt=document.getElementById('tab-results');
@@ -623,15 +605,14 @@ async function loadStore(){
   }
 }
 
-/* push the whole store to the cloud; needs name+password. Optional logEntry recorded server-side. */
-async function pushStore(logEntry){
+/* push the whole store to the cloud; needs name+password */
+async function pushStore(){
   const res=await fetch(STORE_URL+'/save',{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({store,name:session.name,password:session.password,logEntry:logEntry||null})
+    body:JSON.stringify({store,name:session.name,password:session.password})
   });
   const data=await res.json();
   if(!res.ok || data.error){throw new Error(data.error||'Save failed');}
-  if(data.log)delLog=data.log;
   return data;
 }
 
@@ -800,42 +781,7 @@ function renderWeekPicker(keepWeek){
 function renderResults(){
   renderWeekPicker();
   drawResultsTable();
-  drawHistory();
   updateStamp();
-}
-
-/* subtabs: Scores vs Delete history */
-document.getElementById('subScores').addEventListener('click',()=>{
-  document.getElementById('subScores').classList.add('active');
-  document.getElementById('subHistory').classList.remove('active');
-  document.getElementById('scoresView').classList.remove('hidden');
-  document.getElementById('historyView').classList.add('hidden');
-});
-document.getElementById('subHistory').addEventListener('click',()=>{
-  document.getElementById('subHistory').classList.add('active');
-  document.getElementById('subScores').classList.remove('active');
-  document.getElementById('historyView').classList.remove('hidden');
-  document.getElementById('scoresView').classList.add('hidden');
-  drawHistory();
-});
-
-function drawHistory(){
-  const body=document.getElementById('histBody');
-  if(!body)return;
-  body.innerHTML='';
-  if(!delLog.length){
-    body.innerHTML='<tr><td colspan="4" style="color:#c0c8d2;padding:18px">No deletions recorded yet.</td></tr>';
-    return;
-  }
-  // newest first
-  [...delLog].reverse().forEach(e=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td class="histact">${e.action||''}</td>
-      <td>${e.detail||''}</td>
-      <td>${e.who||'?'}</td>
-      <td class="histwhen">${e.when||''}</td>`;
-    body.appendChild(tr);
-  });
 }
 
 document.getElementById('weekPick').addEventListener('change',drawResultsTable);
@@ -872,11 +818,10 @@ async function deleteClass(wk,cls){
   if(!confirm(`Delete the score for class ${cls} in week ${wk}? This cannot be undone.`))return;
   if(!ensureSession())return;
   const backup=store[wk][cls];
-  const detail=`Class ${cls}, Week ${wk} (was Beh ${backup.beh}%, Cln ${backup.cln}%)`;
   delete store[wk][cls];
   if(store[wk] && Object.keys(store[wk]).length===0)delete store[wk];
   try{
-    await pushStore({action:'Deleted class',who:session.name,detail});
+    await pushStore();
     renderWeekPicker(wk);drawResultsTable();
   }catch(err){
     store[wk]=store[wk]||{};store[wk][cls]=backup;  // roll back
@@ -894,10 +839,9 @@ document.getElementById('delWeekBtn').addEventListener('click',async()=>{
   if(!confirm(`Delete ALL ${n} saved class score${n>1?'s':''} for week ${wk}? This cannot be undone.`))return;
   if(!ensureSession())return;
   const backup=store[wk];
-  const detail=`Whole Week ${wk} (${n} class${n>1?'es':''})`;
   delete store[wk];
   try{
-    await pushStore({action:'Deleted week',who:session.name,detail});
+    await pushStore();
     renderWeekPicker(wk);drawResultsTable();
   }catch(err){
     store[wk]=backup;  // roll back

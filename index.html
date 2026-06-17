@@ -704,13 +704,12 @@ function handleFile(f){
 cameraInput.addEventListener('change',e=>handleFile(e.target.files[0]));
 galleryInput.addEventListener('change',e=>handleFile(e.target.files[0]));
 
-/* Auto-enhance: brighten dark photos and boost contrast so faint/low-light
-   sheets read better. Also caps size so uploads stay fast. */
+/* Auto-enhance: brighten dull/dark photos, neutralise warm flash, boost contrast
+   so low-quality and Android-flash sheets read better. Also caps size. */
 function enhanceImage(dataUrl){
   return new Promise(resolve=>{
     const img=new Image();
     img.onload=()=>{
-      // cap longest side at ~2000px (keeps detail, limits upload size)
       const maxDim=2000;
       let {width,height}=img;
       const scale=Math.min(1,maxDim/Math.max(width,height));
@@ -721,26 +720,36 @@ function enhanceImage(dataUrl){
       try{
         const imgData=ctx.getImageData(0,0,width,height);
         const d=imgData.data;
-        // measure average brightness
-        let sum=0;
-        for(let i=0;i<d.length;i+=4){sum+=(d[i]+d[i+1]+d[i+2])/3;}
-        const avg=sum/(d.length/4);
-        // if the image is dark (avg < 130), brighten + add contrast
-        if(avg<130){
-          const bright=Math.min(60,130-avg);     // how much to lift
-          const contrast=1.25;                    // mild contrast boost
-          const intercept=128*(1-contrast);
-          for(let i=0;i<d.length;i+=4){
-            for(let k=0;k<3;k++){
-              let v=d[i+k]+bright;
-              v=v*contrast+intercept;
-              d[i+k]=v<0?0:v>255?255:v;
-            }
-          }
-          ctx.putImageData(imgData,0,0);
+        // average brightness + per-channel averages (for white balance)
+        let sum=0,rSum=0,gSum=0,bSum=0;
+        const n=d.length/4;
+        for(let i=0;i<d.length;i+=4){
+          rSum+=d[i];gSum+=d[i+1];bSum+=d[i+2];
+          sum+=(d[i]+d[i+1]+d[i+2])/3;
         }
-      }catch(e){/* if processing fails, just use the resized image */}
-      const out=c.toDataURL('image/jpeg',0.9);
+        const avg=sum/n, rAvg=rSum/n, gAvg=gSum/n, bAvg=bSum/n;
+        const gray=(rAvg+gAvg+bAvg)/3;
+        // white-balance gains: pull each channel toward neutral (fixes warm/yellow flash)
+        const rG=gray/(rAvg||1), gG=gray/(gAvg||1), bG=gray/(bAvg||1);
+        // clamp gains so we don't over-correct
+        const cl=(x)=>Math.max(0.8,Math.min(1.25,x));
+        const rGain=cl(rG),gGain=cl(gG),bGain=cl(bG);
+        // brightness lift: trigger on anything below 165 (was 130), scale to how dull it is
+        const bright=avg<165?Math.min(70,(165-avg)*0.9):0;
+        const contrast=avg<165?1.35:1.12;      // stronger contrast on duller images
+        const intercept=128*(1-contrast);
+        const gains=[rGain,gGain,bGain];
+        for(let i=0;i<d.length;i+=4){
+          for(let k=0;k<3;k++){
+            let v=d[i+k]*gains[k];        // white balance
+            v=v+bright;                   // brighten
+            v=v*contrast+intercept;       // contrast
+            d[i+k]=v<0?0:v>255?255:v;
+          }
+        }
+        ctx.putImageData(imgData,0,0);
+      }catch(e){/* if processing fails, use the plain resized image */}
+      const out=c.toDataURL('image/jpeg',0.92);
       resolve({dataUrl:out,base64:out.split(',')[1]});
     };
     img.onerror=()=>resolve({dataUrl,base64:dataUrl.split(',')[1]});
